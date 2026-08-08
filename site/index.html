@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5">
+<title>東京23区 用途地域マップ</title>
+<meta name="description" content="東京23区の用途地域・高度地区・防火地域を地図上で確認できます。地点をクリックすると建ぺい率・容積率・高さ制限が表示され、各区の公式都市計画GISへそのまま飛べます。">
+<link rel="stylesheet" href="vendor/maplibre-gl.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div id="app">
+  <aside id="panel">
+    <header id="brand">
+      <h1>東京23区 用途地域マップ</h1>
+      <p id="kijunbi">読み込み中…</p>
+    </header>
+
+    <section class="block">
+      <label class="lbl" for="q">住所で探す</label>
+      <form id="searchForm" autocomplete="off">
+        <input id="q" type="search" placeholder="例：中野区沼袋1-32-1" enterkeyhint="search">
+        <button type="submit" aria-label="検索">検索</button>
+      </form>
+      <p id="searchMsg" class="msg" hidden></p>
+
+      <label class="lbl" for="wardSel">区から探す</label>
+      <select id="wardSel">
+        <option value="">区を選択…</option>
+      </select>
+    </section>
+
+    <section class="block">
+      <label class="lbl">表示する地域</label>
+      <div id="layerTabs" class="tabs" role="tablist">
+        <button class="tab is-on" data-layer="youto" role="tab">用途地域</button>
+        <button class="tab" data-layer="kodo" role="tab">高度地区</button>
+        <button class="tab" data-layer="bouka" role="tab">防火</button>
+      </div>
+      <div id="legend" class="legend"></div>
+    </section>
+
+    <section class="block" id="resultBlock">
+      <label class="lbl">地点の情報</label>
+      <div id="result" class="result empty">
+        地図をクリック、または住所を検索してください。
+      </div>
+    </section>
+
+    <footer id="credits">
+      <p><strong>このサイトは参考情報です。</strong>正式な内容は必ず各区の窓口・公式GISでご確認ください。</p>
+      <p id="sourceLine"></p>
+      <p>背景地図：<a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank" rel="noopener">地理院タイル</a>（国土地理院）</p>
+      <p id="updatedLine"></p>
+    </footer>
+  </aside>
+
+  <main id="mapWrap">
+    <div id="map"></div>
+    <div id="basemaps" class="basemaps">
+      <button class="bm is-on" data-base="pale">淡色</button>
+      <button class="bm" data-base="std">標準</button>
+      <button class="bm" data-base="photo">写真</button>
+    </div>
+    <div id="zoomHint" class="hint" hidden>拡大すると地域が表示されます</div>
+    <button id="panelToggle" aria-label="パネルを開閉">情報</button>
+  </main>
+</div>
+
+<script src="vendor/maplibre-gl.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

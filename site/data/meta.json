@@ -1,0 +1,29 @@
+{
+ "builtAt": "2026-08-07T19:43:14+09:00",
+ "checkedAt": "2026-08-07T21:16:42+09:00",
+ "sources": {
+  "youto": {
+   "label": "用途地域",
+   "url": "https://www.opendata.metro.tokyo.lg.jp/toshiseibi/gis01_youtochiiki.zip",
+   "lastModified": "Thu, 15 Jan 2026 03:01:02 GMT",
+   "kijunbi": "令和7年3月31日"
+  },
+  "kodo": {
+   "label": "高度地区",
+   "url": "https://www.opendata.metro.tokyo.lg.jp/toshiseibi/gis02_koudochiku.zip",
+   "lastModified": "Thu, 15 Jan 2026 03:01:02 GMT",
+   "kijunbi": "令和7年3月31日"
+  },
+  "bouka": {
+   "label": "防火・準防火地域",
+   "url": "https://www.opendata.metro.tokyo.lg.jp/toshiseibi/gis03_bouka.zip",
+   "lastModified": "Thu, 15 Jan 2026 03:01:03 GMT",
+   "kijunbi": "令和7年3月31日"
+  }
+ },
+ "attribution": [
+  "東京都都市整備局「都市計画決定情報GISデータ」（CC BY 4.0）を加工して作成",
+  "国土交通省 国土数値情報「行政区域データ」を加工して作成（区界）",
+  "地理院タイル（国土地理院）"
+ ]
+}
