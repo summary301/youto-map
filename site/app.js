@@ -381,7 +381,7 @@ function gisLink(ward, lon, lat) {
   );
 }
 
-async function inspect(lon, lat) {
+async function inspect(lon, lat, matchedTitle) {
   const ward = findWard(lon, lat);
   if (!ward) {
     $('#result').className = 'result empty';
@@ -390,7 +390,15 @@ async function inspect(lon, lat) {
   }
 
   if (marker) marker.remove();
-  marker = new maplibregl.Marker({ color: '#1f6feb' }).setLngLat([lon, lat]).addTo(map);
+  /* 既定オフセットは [0,-14] で、ピン先端が基準点の1px下に描かれる
+   * （ズーム16.5なら約1.4mのズレになる）。-15 にすると先端が基準点に一致する。 */
+  marker = new maplibregl.Marker({ color: '#1f6feb', offset: [0, -15], draggable: true })
+    .setLngLat([lon, lat])
+    .addTo(map);
+  marker.on('dragend', () => {
+    const p = marker.getLngLat();
+    inspect(p.lng, p.lat);
+  });
 
   $('#result').className = 'result';
   $('#result').innerHTML = `<p class="ward">${esc(ward.name)}</p><p class="coord">読み込み中…</p>`;
@@ -403,7 +411,9 @@ async function inspect(lon, lat) {
 
   $('#result').innerHTML =
     `<p class="ward">${esc(ward.name)}</p>` +
+    (matchedTitle ? `<p class="matched">検索一致：${esc(matchedTitle)}</p>` : '') +
     `<p class="coord">緯度 ${lat.toFixed(6)}／経度 ${lon.toFixed(6)}</p>` +
+    `<p class="tip">ピンはドラッグで動かせます。動かした地点で引き直します。</p>` +
     cardYouto(youto && youto.properties) +
     cardKodo(kodo && kodo.properties) +
     cardBouka(bouka && bouka.properties) +
@@ -435,8 +445,11 @@ async function search(query) {
       msg.hidden = false;
       return;
     }
+    /* ジオコーダが返すのは住所の代表点。どこまで一致したか（号まで／番止まり）で
+     * 実際の地点との差が変わるため、一致した住所そのものを結果に出す。 */
+    const matched = list[0].properties && list[0].properties.title;
     map.flyTo({ center: [lon, lat], zoom: Math.max(map.getZoom(), 16.5), duration: 900 });
-    inspect(lon, lat);
+    inspect(lon, lat, matched);
   } catch (e) {
     msg.textContent = '住所検索に失敗しました（' + e.message + '）。地図を直接クリックしてください。';
     msg.hidden = false;
