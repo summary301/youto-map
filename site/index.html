@@ -21,14 +21,29 @@
       <label class="lbl" for="q">住所で探す</label>
       <form id="searchForm" autocomplete="off">
         <input id="q" type="search" placeholder="例：中野区沼袋1-32-1" enterkeyhint="search">
+        <button type="button" id="micBtn" class="mic-btn" aria-label="音声で検索" hidden>🎙️</button>
         <button type="submit" aria-label="検索">検索</button>
       </form>
       <p id="searchMsg" class="msg" hidden></p>
 
-      <label class="lbl" for="wardSel">区から探す</label>
-      <select id="wardSel">
-        <option value="">区を選択…</option>
-      </select>
+      <label class="lbl" for="wardSel">選んで探す</label>
+      <div class="picker">
+        <div class="step">
+          <select id="wardSel" class="sel" aria-label="区を選ぶ">
+            <option value="">区を選択…</option>
+          </select>
+        </div>
+        <div class="step" id="chomeStep" hidden>
+          <select id="chomeSel" class="sel" aria-label="町名・丁目を選ぶ">
+            <option value="">町名・丁目を選択…</option>
+          </select>
+        </div>
+        <div class="step" id="banStep" hidden>
+          <select id="banSel" class="sel" aria-label="番・番地を選ぶ">
+            <option value="">番・番地を選択…</option>
+          </select>
+        </div>
+      </div>
     </section>
 
     <section class="block">
@@ -51,6 +66,7 @@
     <footer id="credits">
       <p><strong>このサイトは参考情報です。</strong>正式な内容は必ず各区の窓口・公式GISでご確認ください。</p>
       <p id="sourceLine"></p>
+      <p id="juushoLine"></p>
       <p>背景地図：<a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank" rel="noopener">地理院タイル</a>（国土地理院）</p>
       <p id="updatedLine"></p>
     </footer>

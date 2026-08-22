@@ -23,10 +23,13 @@ const BASEMAPS = {
 /* 読み込んだ生データ。store[layer][wardCode] = [feature, ...] */
 const store = { youto: {}, kodo: {}, bouka: {} };
 const loading = {};           /* 進行中の fetch を区ごとに保持 */
+/* 「選んで探す」用の住所ツリー。addrStore[wardCode] = {町丁目: [[番, lon, lat], ...]} */
+const addrStore = {};
+const addrLoading = {};
 let wardsMeta = {};           /* wards.json の wards */
 let tokyoGis = null;          /* wards.json の tokyo（東京都の全都域サービス） */
 let codeTable = {};           /* codes.json */
-let wardShapes = [];          /* {code, name, bbox, geometry} */
+let wardShapes = [];          /* {code, name, feature, bbox} */
 let activeLayer = 'youto';
 let marker = null;
 
@@ -138,6 +141,17 @@ function ensureWard(code) {
     refreshSources();
   });
   return loading[code];
+}
+
+/* 住所ツリーは「選んで探す」で区を選んだ時だけ要る。地図のパンで巻き込み
+ * 読み込みされないよう、ensureWard とは別立てにしている。 */
+function ensureAddress(code) {
+  if (addrLoading[code]) return addrLoading[code];
+  if (addrStore[code]) return Promise.resolve();
+  addrLoading[code] = loadJSON(`data/juusho/${code}.json`).then((tree) => {
+    addrStore[code] = tree;
+  });
+  return addrLoading[code];
 }
 
 /* 表示範囲に重なる区を読み込む */
@@ -424,6 +438,79 @@ async function inspect(lon, lat, matchedTitle) {
 }
 
 /* ======================================================================
+ * 選んで探す（区 → 町名・丁目 → 番・番地）
+ * ==================================================================== */
+const CHOME_PLACEHOLDER = '町名・丁目を選択…';
+const BAN_PLACEHOLDER = '番・番地を選択…';
+
+/* 住居表示を実施している地区は「○番○号」、未実施（地番）は「○番地」。
+ * ビルド側が未実施の要素にだけ4つ目の印を付けているので、それで出し分ける。 */
+function banLabel(entry) {
+  return entry[3] ? `${entry[0]}番地` : `${entry[0]}番`;
+}
+
+/* items は [value, label] の配列。先頭に未選択のプレースホルダを置く。
+ * 中身が空なら、その段自体を隠す（前段を選ぶまで現れない）。 */
+function fillSelect(sel, items, placeholder) {
+  sel.innerHTML = '';
+  const head = document.createElement('option');
+  head.value = '';
+  head.textContent = placeholder;
+  sel.appendChild(head);
+  for (const [value, label] of items) {
+    const opt = document.createElement('option');
+    opt.value = value;
+    opt.textContent = label;
+    sel.appendChild(opt);
+  }
+  const step = sel.closest('.step');
+  if (step) step.hidden = items.length === 0;
+}
+
+function resetSelect(sel, placeholder) {
+  fillSelect(sel, [], placeholder);
+}
+
+async function onWardPicked(code) {
+  resetSelect($('#chomeSel'), CHOME_PLACEHOLDER);
+  resetSelect($('#banSel'), BAN_PLACEHOLDER);
+  const w = wardShapes.find((x) => x.code === code);
+  if (!w) return;
+  map.fitBounds([[w.bbox[0], w.bbox[1]], [w.bbox[2], w.bbox[3]]],
+                { padding: 30, duration: 900 });
+  await ensureAddress(code);
+  const names = Object.keys(addrStore[code] || {});
+  fillSelect($('#chomeSel'), names.map((n) => [n, n]), CHOME_PLACEHOLDER);
+}
+
+/* 町名・丁目の段階では地点を確定しない。1つの丁目の中でも用途地域は変わるので、
+ * 代表点の値を出すと「町全体がこの用途」と誤解される。ズームだけに留める。 */
+function onChomePicked(code, chome) {
+  resetSelect($('#banSel'), BAN_PLACEHOLDER);
+  const blocks = (addrStore[code] || {})[chome];
+  if (!blocks || !blocks.length) return;
+  let [w, s, e, n] = [Infinity, Infinity, -Infinity, -Infinity];
+  for (const [, lon, lat] of blocks) {
+    if (lon < w) w = lon;
+    if (lon > e) e = lon;
+    if (lat < s) s = lat;
+    if (lat > n) n = lat;
+  }
+  map.fitBounds([[w, s], [e, n]], { padding: 60, maxZoom: 17, duration: 900 });
+  fillSelect($('#banSel'), blocks.map((b) => [b[0], banLabel(b)]), BAN_PLACEHOLDER);
+}
+
+function onBanPicked(code, chome, ban) {
+  const blocks = (addrStore[code] || {})[chome] || [];
+  const hit = blocks.find((b) => b[0] === ban);
+  if (!hit) return;
+  const [, lon, lat] = hit;
+  const wardName = (wardShapes.find((x) => x.code === code) || {}).name || '';
+  map.flyTo({ center: [lon, lat], zoom: Math.max(map.getZoom(), 16.5), duration: 900 });
+  inspect(lon, lat, `${wardName}${chome}${banLabel(hit)}`);
+}
+
+/* ======================================================================
  * 住所検索（国土地理院ジオコーダ）
  * ==================================================================== */
 async function search(query) {
@@ -454,6 +541,58 @@ async function search(query) {
     msg.textContent = '住所検索に失敗しました（' + e.message + '）。地図を直接クリックしてください。';
     msg.hidden = false;
   }
+}
+
+/* ======================================================================
+ * 音声入力（Web Speech API）
+ * ==================================================================== */
+const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
+let recognizer = null;
+
+function initVoiceSearch() {
+  if (!SpeechRecognitionAPI) return; // 非対応ブラウザはボタンを出さない
+  const micBtn = $('#micBtn');
+  micBtn.hidden = false;
+
+  micBtn.addEventListener('click', () => {
+    if (recognizer) {
+      recognizer.stop(); // 聞き取り中に再タップ→キャンセル
+      return;
+    }
+    startListening(micBtn);
+  });
+}
+
+function startListening(micBtn) {
+  const msg = $('#searchMsg');
+  msg.hidden = true;
+
+  recognizer = new SpeechRecognitionAPI();
+  recognizer.lang = 'ja-JP';
+  recognizer.interimResults = false;
+  recognizer.maxAlternatives = 1;
+
+  micBtn.classList.add('is-listening');
+
+  recognizer.onresult = (e) => {
+    const transcript = e.results[0][0].transcript;
+    $('#q').value = transcript;
+    search(transcript);
+  };
+  recognizer.onerror = (e) => {
+    const messages = {
+      'not-allowed': 'マイクの利用が許可されていません。',
+      'no-speech': '音声を認識できませんでした。もう一度お試しください。',
+    };
+    msg.textContent = messages[e.error] || '音声入力に失敗しました。';
+    msg.hidden = false;
+  };
+  recognizer.onend = () => {
+    micBtn.classList.remove('is-listening');
+    recognizer = null;
+  };
+
+  recognizer.start();
 }
 
 /* ======================================================================
@@ -491,13 +630,13 @@ async function loadBaseData() {
       (meta.builtAt ? `／データ取り込み：${meta.builtAt.slice(0, 10)}` : '');
   }
 
-  const sel = $('#wardSel');
-  for (const w of wardShapes) {
-    const opt = document.createElement('option');
-    opt.value = w.code;
-    opt.textContent = w.name;
-    sel.appendChild(opt);
+  const juusho = meta.sources && meta.sources.juusho;
+  if (juusho) {
+    $('#juushoLine').textContent =
+      `住所の選択：街区レベル位置参照情報（国土交通省）${juusho.kijunbi || ''}を加工して作成`;
   }
+
+  fillSelect($('#wardSel'), wardShapes.map((w) => [w.code, w.name]), '区を選択…');
   renderLegend();
 }
 
@@ -549,10 +688,15 @@ document.getElementById('searchForm').addEventListener('submit', (e) => {
   search($('#q').value);
 });
 document.getElementById('wardSel').addEventListener('change', (e) => {
-  const w = wardShapes.find((x) => x.code === e.target.value);
-  if (!w) return;
-  map.fitBounds([[w.bbox[0], w.bbox[1]], [w.bbox[2], w.bbox[3]]], { padding: 30, duration: 900 });
+  onWardPicked(e.target.value);
+});
+document.getElementById('chomeSel').addEventListener('change', (e) => {
+  onChomePicked($('#wardSel').value, e.target.value);
+});
+document.getElementById('banSel').addEventListener('change', (e) => {
+  onBanPicked($('#wardSel').value, $('#chomeSel').value, e.target.value);
 });
 document.getElementById('panelToggle').addEventListener('click', () => {
   document.getElementById('app').classList.toggle('panel-collapsed');
 });
+initVoiceSearch();

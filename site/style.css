@@ -71,7 +71,7 @@ html, body {
 .block .lbl + .lbl { margin-top: 16px; }
 
 #searchForm { display: flex; gap: 6px; }
-#q, #wardSel {
+#q, .sel {
   width: 100%;
   padding: 9px 10px;
   font-size: 14px;
@@ -81,7 +81,15 @@ html, body {
   background: var(--bg);
   color: var(--text);
 }
-#q:focus, #wardSel:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+#q:focus, .sel:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+
+/* 区→町名・丁目→番・番地。前段を選ぶまで次の段は現れない */
+.picker { display: grid; gap: 8px; }
+.step { animation: step-in .18s ease-out; }
+@keyframes step-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: none; }
+}
 #searchForm button {
   flex: 0 0 auto;
   padding: 0 14px;
@@ -95,6 +103,24 @@ html, body {
   cursor: pointer;
 }
 #searchForm button:hover { background: var(--accent-dark); }
+
+#searchForm .mic-btn {
+  padding: 0 12px;
+  font-size: 15px;
+  color: initial;
+  background: var(--bg);
+  border: 1px solid var(--line);
+}
+#searchForm .mic-btn:hover { background: var(--panel); }
+#searchForm .mic-btn.is-listening {
+  background: #d64545;
+  border-color: #d64545;
+  animation: mic-pulse 1.2s ease-in-out infinite;
+}
+@keyframes mic-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: .55; }
+}
 
 .msg {
   margin: 8px 0 0;

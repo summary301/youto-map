@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import io
 import json
 import re
@@ -54,6 +55,10 @@ LAYERS = {
 
 # 区界（国土数値情報 行政区域データ）
 N03_URL = "https://nlftp.mlit.go.jp/ksj/gml/data/N03/N03-2025/N03-20250101_13_GML.zip"
+
+# 住所ツリー（国土交通省 街区レベル位置参照情報・東京都）
+ISJ_URL = "https://nlftp.mlit.go.jp/isj/dls/data/24.0a/13000-24.0a.zip"
+ISJ_LABEL = "街区レベル位置参照情報"
 
 # 東京都の平面直角座標系第9系（JGD2011）→ WGS84
 TO_WGS84 = Transformer.from_crs("EPSG:6677", "EPSG:4326", always_xy=True)
@@ -235,6 +240,97 @@ def write_ward_boundary(ward_codes, ward_geoms):
 
 
 # --------------------------------------------------------------------------
+# 住所ツリー（区 → 町名・丁目 → 番／番地）
+# --------------------------------------------------------------------------
+_KANJI_DIGITS = {"一": 1, "二": 2, "三": 3, "四": 4, "五": 5,
+                 "六": 6, "七": 7, "八": 8, "九": 9}
+_CHOME_RE = re.compile(r"^(.*?)([一二三四五六七八九十]+)丁目$")
+
+
+def kanji_to_int(s: str) -> int:
+    """「五」「十」「十二」「二十」程度の漢数字を整数に。丁目の並べ替え用。"""
+    if "十" not in s:
+        return sum(_KANJI_DIGITS.get(c, 0) for c in s)
+    head_s, _, tail_s = s.partition("十")
+    tens = _KANJI_DIGITS.get(head_s, 1) if head_s else 1
+    ones = _KANJI_DIGITS.get(tail_s, 0) if tail_s else 0
+    return tens * 10 + ones
+
+
+def chome_sort_key(name: str):
+    """「沼袋一丁目」→ ("沼袋", 1)。丁目を持たない町名は数字0で先頭に。"""
+    m = _CHOME_RE.match(name)
+    if m:
+        return (m.group(1), kanji_to_int(m.group(2)))
+    return (name, 0)
+
+
+def ban_sort_key(ban: str):
+    """街区符号は数値順。地番などで数値化できないものは後ろに文字列順で。"""
+    return (0, int(ban), "") if ban.isdigit() else (1, 0, ban)
+
+
+def build_address_tree():
+    """街区レベル位置参照情報から、区ごとの「町名・丁目 → 番 → 座標」を書き出す。
+
+    要素は [番, 経度, 緯度]。住居表示が未実施＝地番の場合だけ4要素目に 1 を足す。
+    住居表示実施地区は「○番○号」、未実施地区は「○番地」と表記が変わるため、
+    表示側でこの印を見て出し分ける。23区では未実施は3.7%（新宿区・千代田区に集中）。
+    """
+    zip_path = CACHE / "isj.zip"
+    if not zip_path.exists():
+        log(f"{ISJ_LABEL}をダウンロード中…")
+        download(ISJ_URL, zip_path)
+
+    code_by_name = {name: code for code, name in WARDS.WARD_NAME_BY_CODE.items()}
+    buckets: dict[str, dict[str, list]] = {c: {} for c in WARDS.WARD_CODES}
+    total = kept = 0
+
+    with zipfile.ZipFile(zip_path) as z:
+        csv_name = next(n for n in z.namelist() if n.lower().endswith(".csv"))
+        text = z.read(csv_name).decode("cp932")
+    reader = csv.reader(io.StringIO(text))
+    next(reader, None)                       # ヘッダ行
+    for row in reader:
+        total += 1
+        city, chome, ban = row[1], row[2], row[4]
+        lat, lon = row[8], row[9]
+        jukyo, rep, h_old, h_new = row[10], row[11], row[12], row[13]
+        code = code_by_name.get(city)
+        if code is None:                     # 23区以外（多摩地域・島しょ部）
+            continue
+        if rep != "1" or h_old == "3" or h_new == "3":
+            # 同じ街区に複数の点がある場合は代表点だけを採り、削除済みは除く
+            continue
+        entry = [ban, round(float(lon), COORD_DIGITS), round(float(lat), COORD_DIGITS)]
+        if jukyo != "1":                     # 住居表示未実施＝地番（「○番地」）
+            entry.append(1)
+        buckets[code].setdefault(chome, []).append(entry)
+        kept += 1
+
+    out_dir = DATA / "juusho"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    written = 0
+    for code, chomes in buckets.items():
+        # 並び順はここで確定させる（JSONのキー順は表示側でそのまま使う）
+        ordered = {name: sorted(chomes[name], key=lambda e: ban_sort_key(e[0]))
+                   for name in sorted(chomes, key=chome_sort_key)}
+        path = out_dir / f"{code}.json"
+        path.write_text(json.dumps(ordered, ensure_ascii=False, separators=(",", ":")),
+                        encoding="utf-8")
+        written += path.stat().st_size
+    log(f"  {ISJ_LABEL}: 全{total}件 → 23区内{kept}件 / "
+        f"出力{written / 1024 / 1024:.1f}MB")
+    return kijunbi_from_isj(csv_name)
+
+
+def kijunbi_from_isj(csv_name: str) -> str:
+    """ZIP内のCSV名「13_2025.csv」から整備年度を取り出す。"""
+    m = re.search(r"_(\d{4})\.csv$", csv_name)
+    return f"{m.group(1)}年度" if m else ""
+
+
+# --------------------------------------------------------------------------
 # 属性の取り出し
 # --------------------------------------------------------------------------
 def props_youto(rec):
@@ -368,6 +464,26 @@ def main():
         json.dumps(WARDS.as_json(), ensure_ascii=False, separators=(",", ":")),
         encoding="utf-8")
 
+    old_sources = old_meta.get("sources", {})
+
+    # 住所ツリーは都市計画データとは更新サイクルが無関係なので、下の早期終了
+    # ゲートより手前で、位置参照情報のLast-Modifiedを見て個別に判定する
+    log(f"{ISJ_LABEL}の更新を確認中…")
+    isj_remote = head(ISJ_URL)
+    log(f"  {ISJ_LABEL}: Last-Modified={isj_remote['last_modified']}")
+    juusho_src = old_sources.get("juusho")
+    if (args.force or juusho_src is None
+            or juusho_src.get("lastModified") != isj_remote["last_modified"]
+            or not (DATA / "juusho").is_dir()):
+        juusho_src = {
+            "label": ISJ_LABEL,
+            "url": ISJ_URL,
+            "lastModified": isj_remote["last_modified"],
+            "kijunbi": build_address_tree(),
+        }
+    else:
+        log(f"  {ISJ_LABEL}: 変更なし")
+
     # ---- 更新判定 -------------------------------------------------------
     log("配布元の更新を確認中…")
     remote = {}
@@ -375,7 +491,6 @@ def main():
         remote[key] = head(TOKYO_BASE + cfg["zip"])
         log(f"  {cfg['label']}: Last-Modified={remote[key]['last_modified']}")
 
-    old_sources = old_meta.get("sources", {})
     changed = args.force or any(
         old_sources.get(k, {}).get("lastModified") != remote[k]["last_modified"]
         for k in LAYERS
@@ -383,6 +498,7 @@ def main():
     if not changed:
         log("変更はありません。再構築せずに終了します。")
         meta = dict(old_meta)
+        meta["sources"] = {**old_sources, "juusho": juusho_src}
         meta["checkedAt"] = datetime.now(JST).isoformat(timespec="seconds")
         meta_path.write_text(json.dumps(meta, ensure_ascii=False, indent=1),
                              encoding="utf-8")
@@ -414,10 +530,11 @@ def main():
     meta = {
         "builtAt": datetime.now(JST).isoformat(timespec="seconds"),
         "checkedAt": datetime.now(JST).isoformat(timespec="seconds"),
-        "sources": sources,
+        "sources": {**sources, "juusho": juusho_src},
         "attribution": [
             "東京都都市整備局「都市計画決定情報GISデータ」（CC BY 4.0）を加工して作成",
             "国土交通省 国土数値情報「行政区域データ」を加工して作成（区界）",
+            "街区レベル位置参照情報（国土交通省）を加工して作成（住所の選択）",
             "地理院タイル（国土地理院）",
         ],
     }

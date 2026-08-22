@@ -1,6 +1,6 @@
 {
  "builtAt": "2026-08-07T19:43:14+09:00",
- "checkedAt": "2026-08-07T21:16:42+09:00",
+ "checkedAt": "2026-08-23T01:36:23+09:00",
  "sources": {
   "youto": {
    "label": "用途地域",
@@ -19,6 +19,12 @@
    "url": "https://www.opendata.metro.tokyo.lg.jp/toshiseibi/gis03_bouka.zip",
    "lastModified": "Thu, 15 Jan 2026 03:01:03 GMT",
    "kijunbi": "令和7年3月31日"
+  },
+  "juusho": {
+   "label": "街区レベル位置参照情報",
+   "url": "https://nlftp.mlit.go.jp/isj/dls/data/24.0a/13000-24.0a.zip",
+   "lastModified": "Tue, 07 Jul 2026 05:14:07 GMT",
+   "kijunbi": "2025年度"
   }
  },
  "attribution": [
