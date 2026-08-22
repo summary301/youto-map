@@ -63,6 +63,13 @@ ISJ_LABEL = "街区レベル位置参照情報"
 # 東京都の平面直角座標系第9系（JGD2011）→ WGS84
 TO_WGS84 = Transformer.from_crs("EPSG:6677", "EPSG:4326", always_xy=True)
 
+ATTRIBUTION = [
+    "東京都都市整備局「都市計画決定情報GISデータ」（CC BY 4.0）を加工して作成",
+    "国土交通省 国土数値情報「行政区域データ」を加工して作成（区界）",
+    "街区レベル位置参照情報（国土交通省）を加工して作成（住所の選択）",
+    "地理院タイル（国土地理院）",
+]
+
 SIMPLIFY_M = 1.0        # 用途地域等の簡略化許容誤差（メートル）
 SIMPLIFY_WARD_M = 8.0   # 区界の簡略化許容誤差（メートル）
 WARD_PAD_DEG = 0.0003   # 区界クリップ時の余裕（度・約30m）
@@ -499,6 +506,7 @@ def main():
         log("変更はありません。再構築せずに終了します。")
         meta = dict(old_meta)
         meta["sources"] = {**old_sources, "juusho": juusho_src}
+        meta["attribution"] = ATTRIBUTION
         meta["checkedAt"] = datetime.now(JST).isoformat(timespec="seconds")
         meta_path.write_text(json.dumps(meta, ensure_ascii=False, indent=1),
                              encoding="utf-8")
@@ -531,12 +539,7 @@ def main():
         "builtAt": datetime.now(JST).isoformat(timespec="seconds"),
         "checkedAt": datetime.now(JST).isoformat(timespec="seconds"),
         "sources": {**sources, "juusho": juusho_src},
-        "attribution": [
-            "東京都都市整備局「都市計画決定情報GISデータ」（CC BY 4.0）を加工して作成",
-            "国土交通省 国土数値情報「行政区域データ」を加工して作成（区界）",
-            "街区レベル位置参照情報（国土交通省）を加工して作成（住所の選択）",
-            "地理院タイル（国土地理院）",
-        ],
+        "attribution": ATTRIBUTION,
     }
     meta_path.write_text(json.dumps(meta, ensure_ascii=False, indent=1), encoding="utf-8")
     log("完了しました。")
