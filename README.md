@@ -76,9 +76,11 @@ build/
   build_site.py   取得・座標変換・区ごとの分割・書き出し
   codes.py        コード表と配色（表示側にも codes.json として渡る）
   wards.py        23区の定義と各区公式GISのリンクテンプレート
-functions/        ← Cloudflare Pages Functions（サーバー側）
-  api/bukken.js   物件ページから座標だけを取り出す中継
-site/             ← これが公開されるフォルダ
+wrangler.jsonc    ← Worker の設定（静的アセットの場所と入口）
+worker/           ← サーバー側で動く部分
+  index.js        入口。/api/bukken 以外は静的アセットへ渡す
+  bukken.js       物件ページから座標だけを取り出す中継
+site/             ← これが静的アセットとして配られるフォルダ
   index.html / app.js / style.css
   vendor/         MapLibre GL JS（同梱）
   data/           build_site.py の出力
@@ -94,10 +96,19 @@ site/             ← これが公開されるフォルダ
 
 ---
 
-# 公開する手順（Cloudflare Pages）
+# 公開する手順（Cloudflare Workers）
 
 Webサイトを公開したことが無くても進められるよう、順を追って書いてある。
-どちらのアカウントも無料。**費用はかからない。**
+どちらのアカウントも無料。
+
+**このサイトは「静的アセット付き Worker」として動いている。**
+`site/` の中身は Cloudflare が直接返し、当たらなかった要求（`/api/bukken`）だけが
+`worker/index.js` に降りてくる。静的ファイルの配信は無料のままで、
+無料枠（10万リクエスト/日）を使うのは物件URL検索のときだけ。
+
+> 以前この節には Cloudflare **Pages** の手順が書いてあったが、実際の配信は
+> Worker だった（`*.workers.dev` は Worker 専用のドメインで、Pages は使えない）。
+> Pages 専用の `functions/` は読まれないため、`worker/` に作り直してある。
 
 ## 1. GitHub にコードを置く
 
@@ -120,21 +131,27 @@ git push -u origin main
 `site/data/` の約13MBもそのままコミットする（Cloudflare Pages はリポジトリの中身を
 そのまま配信するため）。
 
-## 2. Cloudflare Pages につなぐ
+## 2. Cloudflare Workers につなぐ
 
 1. https://dash.cloudflare.com/sign-up でアカウントを作る
-2. 左メニュー **Workers & Pages** →**Create** → **Pages** → **Connect to Git**
+2. 左メニュー **Workers & Pages** → **Create** → **Import a repository**
 3. GitHub を認証し、`youto-map` リポジトリを選ぶ
-4. ビルド設定：
-   - Framework preset： **None**
-   - Build command： **（空欄のまま）**
-   - Build output directory： **`site`**
-5. **Save and Deploy**
 
-1〜2分で `https://youto-map-xxxx.pages.dev/` のようなURLが発行される。
-以降、GitHub に push するたびに自動で再デプロイされる。
+設定は `wrangler.jsonc` に書いてあるので、ダッシュボード側で入力するものは無い。
 
-独自ドメインを使う場合は、Pages プロジェクトの **Custom domains** から追加できる
+```jsonc
+{
+  "name": "youto-map",          // Worker 名。変えると別のURLになる
+  "main": "worker/index.js",    // 入口
+  "assets": { "directory": "./site", "binding": "ASSETS" }
+}
+```
+
+`https://youto-map.<アカウント名>.workers.dev/` が発行され、
+以降は GitHub に push するたびに自動で再デプロイされる
+（ダッシュボードの **Deployments** に push ごとのビルドが並ぶ）。
+
+独自ドメインは **Domains** から追加できる
 （Cloudflare でドメインを管理していれば SSL 込みで無料）。
 
 ## 3. 週次の自動更新を有効にする
@@ -167,8 +184,8 @@ SUUMO の物件ページ
   }
 ```
 
-ブラウザから他サイトを直接読むことは CORS で出来ないため、`functions/api/bukken.js`
-（Cloudflare Pages Functions）が中継する。
+ブラウザから他サイトを直接読むことは CORS で出来ないため、`worker/bukken.js` が中継する。
+入口は `worker/index.js` で、静的アセットに当たらなかった要求だけがここに降りてくる。
 
 **取り出すのは座標だけ。**物件名・価格・説明文は受け取らないし返さない。
 用途地域の判定に要るのは座標だけで、それ以外を持ち出せば転載になる。

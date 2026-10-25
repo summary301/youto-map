@@ -1,0 +1,14 @@
+{
+  // 静的アセット付き Worker の設定。
+  // name は既存の Worker 名と一致させること（変えると別のURLになる）。
+  "name": "youto-map",
+  "main": "worker/index.js",
+  "compatibility_date": "2025-01-01",
+
+  // site/ の中身をそのまま配る。ここに当たる要求は Worker を起動せずに
+  // 返されるので、これまでどおり無料のまま。
+  "assets": {
+    "directory": "./site",
+    "binding": "ASSETS"
+  }
+}

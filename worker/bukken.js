@@ -1,7 +1,9 @@
-/* 物件ページから「座標だけ」を取り出す中継（Cloudflare Pages Functions）
+/* 物件ページから「座標だけ」を取り出す中継
  *
  *   GET /api/bukken?url=<物件ページのURL>
  *   →  { ok: true, lat, lon, source: "SUUMO", url }
+ *
+ * 入口は worker/index.js。静的アセットに当たらなかった要求だけがここに来る。
  *
  * ブラウザから他サイトを直接読むことは CORS で出来ないため、ここで中継する。
  *
@@ -102,7 +104,7 @@ function extractCoords(html) {
   return null;
 }
 
-export async function onRequestGet({ request, waitUntil }) {
+export async function handleBukken(request, ctx) {
   const raw = new URL(request.url).searchParams.get('url');
   if (!raw) return fail(400, 'url パラメータがありません。');
 
@@ -168,6 +170,6 @@ export async function onRequestGet({ request, waitUntil }) {
   const out = json(200, { ok: true, lat, lon, source: v.site, url: v.url });
   const cacheable = out.clone();
   cacheable.headers.set('cache-control', `public, max-age=${CACHE_SECONDS}`);
-  waitUntil(cache.put(cacheKey, cacheable));
+  ctx.waitUntil(cache.put(cacheKey, cacheable));
   return out;
 }
