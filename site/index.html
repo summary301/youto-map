@@ -26,6 +26,16 @@
       </form>
       <p id="searchMsg" class="msg" hidden></p>
 
+      <label class="lbl" for="bukkenUrl">物件ページのURLで探す</label>
+      <form id="bukkenForm" autocomplete="off">
+        <input id="bukkenUrl" type="url" inputmode="url"
+               placeholder="例：https://suumo.jp/tochi/tokyo/sc_sumida/nc_21193103/"
+               enterkeyhint="go">
+        <button type="submit" aria-label="物件ページを開く">開く</button>
+      </form>
+      <p id="bukkenMsg" class="msg" hidden></p>
+      <p class="note-sm">SUUMO の物件詳細ページに対応。ページに載っている地図のピンの座標だけを読み取ります。</p>
+
       <label class="lbl" for="wardSel">選んで探す</label>
       <div class="picker">
         <div class="step">

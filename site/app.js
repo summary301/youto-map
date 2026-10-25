@@ -433,6 +433,7 @@ async function inspect(lon, lat, matchedTitle) {
     cardBouka(bouka && bouka.properties) +
     gisLink(ward, lon, lat);
 
+  rememberPoint(lon, lat);
   document.getElementById('app').classList.remove('panel-collapsed');
   $('#resultBlock').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
@@ -517,6 +518,23 @@ async function search(query) {
   const msg = $('#searchMsg');
   msg.hidden = true;
   if (!query.trim()) return;
+
+  /* 「35.727372, 139.817497」のように緯度経度を直接貼られたら、そのまま地点にする。
+   * 物件ページから座標だけ控えてきた場合に使える。 */
+  const coord = query.match(/^\s*(\d{2}\.\d+)\s*[,、\s]\s*(\d{3}\.\d+)\s*$/);
+  if (coord) {
+    const lat = Number(coord[1]);
+    const lon = Number(coord[2]);
+    if (!findWard(lon, lat)) {
+      msg.textContent = 'この座標は東京23区の外のようです。';
+      msg.hidden = false;
+      return;
+    }
+    map.flyTo({ center: [lon, lat], zoom: Math.max(map.getZoom(), 16.5), duration: 900 });
+    inspect(lon, lat, `緯度 ${lat}／経度 ${lon}`);
+    return;
+  }
+
   try {
     const url =
       'https://msearch.gsi.go.jp/address-search/AddressSearch?q=' + encodeURIComponent(query.trim());
@@ -596,6 +614,64 @@ function startListening(micBtn) {
 }
 
 /* ======================================================================
+ * 物件ページのURLで探す
+ *
+ * ブラウザから他サイトを直接読むことは CORS で出来ないため、同じサイトに
+ * 置いた中継（functions/api/bukken.js）を通す。返ってくるのは座標だけで、
+ * 物件名や価格は受け取らない。
+ * ==================================================================== */
+async function searchByListingUrl(raw) {
+  const msg = $('#bukkenMsg');
+  const url = raw.trim();
+  msg.hidden = true;
+  if (!url) return;
+
+  msg.textContent = '物件ページを読んでいます…';
+  msg.hidden = false;
+
+  let data;
+  try {
+    const res = await fetch('api/bukken?url=' + encodeURIComponent(url));
+    data = await res.json();
+  } catch (e) {
+    msg.textContent = '中継に接続できませんでした（' + e.message + '）。';
+    return;
+  }
+
+  if (!data.ok) {
+    msg.textContent = data.message + (data.hint ? ' ' + data.hint : '');
+    return;
+  }
+
+  msg.hidden = true;
+  map.flyTo({ center: [data.lon, data.lat], zoom: Math.max(map.getZoom(), 17), duration: 900 });
+  inspect(data.lon, data.lat, `${data.source} の掲載地点`);
+}
+
+/* ======================================================================
+ * URLでの地点の受け渡し（?lat=&lon=）
+ * ==================================================================== */
+function pointFromUrl() {
+  const p = new URLSearchParams(location.search);
+  const latRaw = p.get('lat');
+  const lonRaw = p.get('lon') || p.get('lng');
+  if (latRaw === null || lonRaw === null) return null;
+  const lat = Number(latRaw);
+  const lon = Number(lonRaw);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+  return { lat, lon };
+}
+
+/* 見ている地点をアドレス欄に残す。控えておけば後で開き直せるし、人にも送れる。 */
+function rememberPoint(lon, lat) {
+  const p = new URLSearchParams(location.search);
+  p.set('lat', lat.toFixed(6));
+  p.set('lon', lon.toFixed(6));
+  /* 地図が #z/lat/lon を自分で使っている（Map の hash: true）ので消さない */
+  history.replaceState(null, '', location.pathname + '?' + p.toString() + location.hash);
+}
+
+/* ======================================================================
  * 起動
  * ==================================================================== */
 async function loadBaseData() {
@@ -668,6 +744,20 @@ Promise.all([dataReady, mapReady]).then(() => {
   syncViewport();
 });
 
+/* ?lat=&lon= 付きで開かれたら、その地点を最初から出す。
+ * 判定は地図の準備を待たない（上と同じ理由で、地図が描けない環境でも
+ * 地点の情報は出す）。地図を寄せる方だけを map の load にぶら下げる。 */
+const initialPoint = pointFromUrl();
+if (initialPoint) {
+  dataReady.then(() => inspect(initialPoint.lon, initialPoint.lat));
+  mapReady.then(() =>
+    map.jumpTo({
+      center: [initialPoint.lon, initialPoint.lat],
+      zoom: Math.max(map.getZoom(), 17),
+    })
+  );
+}
+
 /* ---- イベント ---- */
 map.on('moveend', syncViewport);
 map.on('click', (e) => inspect(e.lngLat.lng, e.lngLat.lat));
@@ -686,6 +776,10 @@ document.getElementById('basemaps').addEventListener('click', (e) => {
 document.getElementById('searchForm').addEventListener('submit', (e) => {
   e.preventDefault();
   search($('#q').value);
+});
+document.getElementById('bukkenForm').addEventListener('submit', (e) => {
+  e.preventDefault();
+  searchByListingUrl($('#bukkenUrl').value);
 });
 document.getElementById('wardSel').addEventListener('change', (e) => {
   onWardPicked(e.target.value);

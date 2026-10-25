@@ -70,8 +70,8 @@ html, body {
 }
 .block .lbl + .lbl { margin-top: 16px; }
 
-#searchForm { display: flex; gap: 6px; }
-#q, .sel {
+#searchForm, #bukkenForm { display: flex; gap: 6px; }
+#q, #bukkenUrl, .sel {
   width: 100%;
   padding: 9px 10px;
   font-size: 14px;
@@ -81,7 +81,7 @@ html, body {
   background: var(--bg);
   color: var(--text);
 }
-#q:focus, .sel:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+#q:focus, #bukkenUrl:focus, .sel:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
 
 /* 区→町名・丁目→番・番地。前段を選ぶまで次の段は現れない */
 .picker { display: grid; gap: 8px; }
@@ -90,7 +90,7 @@ html, body {
   from { opacity: 0; transform: translateY(-4px); }
   to   { opacity: 1; transform: none; }
 }
-#searchForm button {
+#searchForm button, #bukkenForm button {
   flex: 0 0 auto;
   padding: 0 14px;
   font-size: 13px;
@@ -102,7 +102,16 @@ html, body {
   border-radius: 7px;
   cursor: pointer;
 }
-#searchForm button:hover { background: var(--accent-dark); }
+#searchForm button:hover,
+#bukkenForm button:hover { background: var(--accent-dark); }
+
+/* 物件URL欄の下に置く一行の説明 */
+.note-sm {
+  margin: 7px 0 0;
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.6;
+}
 
 #searchForm .mic-btn {
   padding: 0 12px;
